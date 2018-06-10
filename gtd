@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+. .gtd.conf
+
+# Inbox (extra ics)
+# Today (due =< today or prio == 1 or tag = today)
+# Next  (!due and tag = next or !tag)
+# Scheduled (due > today)
+# Someday (!due and tag == someday)
+
+# Prio:
+# 0 = no
+# 1 = high
+# 5 = mid
+# 9 = low
+
+
+inbox=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_inbox}/*)
+things=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_things}/*)
+
+parse() {
+	looks=${1}; shift
+	files=${@}
+	case ${looks} in
+		today)
+			lookup='if ((due != 0 && due <= today) || prio == 1 || tag == "today")'
+			;;
+		next)
+			lookup='if ((due == 0 || due > today) && (tag == "next" || tag == ""))'
+			;;
+		scheduled)
+			lookup='if (due > today)'
+			;;
+		someday)
+			lookup='if ((due == 0 && tag '
+			;;
+		all)
+			lookup='if (0 == 0)'
+			;;
+	esac
+
+	gawk '
+	BEGIN {
+		FS = ":";
+		today = strftime("%Y-%m-%d", systime());
+		count = 0;
+	}
+	/^BEGIN:VTODO/ { due = 0; tag = ""; prio = 0; count = count + 1 };
+	/^SUMMARY:/    {
+		summary = gensub("\r", "", "g", gensub(/^SUMMARY:/, "", 1, $0));
+		if (length(summary) > 57) {
+			summary = substr(summary, 0, 57)"..."
+		}
+	};
+	/^DUE/         { due = gensub("([0-9]{4})([0-9]{2})([0-9]{2}).*[\r]*", "\\1-\\2-\\3", "g", $2); };
+	/^CATEGORIES/  { tag = $2; };
+	/^PRIORITY/    { prio = $2; };
+	/^DESCRIPTION/ { description = gensub("\r", "", "g", gensub(/^DESCRIPTION:/, "", 1, $0)); }
+
+	/^END:VTODO/ {
+		'"${lookup}"' {
+			if (tag != "") tag = "@"tag;
+			if (due == 0)  due = "";
+			if (prio == 0) { prio = ""; } else
+			if (prio > 7) { prio = "!"; } else
+			if (prio < 4 && prio != 0) { prio = "!!!"; } else
+			if (prio >= 4 && prio <= 7) { prio = "!!"; }
+			if (count % 2 == 0)
+				printf "\033[48;5;234m%3s %-65s %-10s %-10s\033[0m\n", prio, summary, tag, due;
+			else
+				printf "\033[0m%3s %-65s %-10s %-10s\n", prio, summary, tag, due;
+		}
+	}
+	' \
+	${files}
+}
+
+list() {
+	case "${1}" in
+		in|inbox)
+			parse all ${inbox}
+			;;
+		a|all)
+			parse all ${inbox} ${things}
+			;;
+		n|next)
+			parse next ${things}
+			;;
+		s|scheduled)
+			parse scheduled ${things}
+			;;
+		so|someday)
+			parse someday ${things}
+			;;
+		*)
+			parse today ${things}
+			;;
+	esac
+}
+
+list ${1}
+
+
+# vim:syntax=sh
