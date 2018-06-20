@@ -19,8 +19,10 @@ inbox=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_inbox}/*)
 things=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_things}/*)
 
 parse() {
-	looks=${1}; shift
-	files=${@}
+	local looks=${1}; shift
+	local files=${@}
+	local lookup=''
+
 	case ${looks} in
 		today)
 			lookup='if ((due != 0 && due <= today) || prio == 1 || tag == "today")'
@@ -45,7 +47,7 @@ parse() {
 		today = strftime("%Y-%m-%d", systime());
 		count = 0;
 	}
-	/^BEGIN:VTODO/ { due = 0; tag = ""; prio = 0; count = count + 1 };
+	/^BEGIN:VTODO/ { due = 0; tag = ""; prio = 0; };
 	/^SUMMARY:/    {
 		summary = gensub("\r", "", "g", gensub(/^SUMMARY:/, "", 1, $0));
 		if (length(summary) > 57) {
@@ -56,6 +58,7 @@ parse() {
 	/^CATEGORIES/  { tag = $2; };
 	/^PRIORITY/    { prio = $2; };
 	/^DESCRIPTION/ { description = gensub("\r", "", "g", gensub(/^DESCRIPTION:/, "", 1, $0)); }
+	/^UID/         { uid = substr($2, 0, 5); };
 
 	/^END:VTODO/ {
 		'"${lookup}"' {
@@ -66,9 +69,10 @@ parse() {
 			if (prio < 4 && prio != 0) { prio = "!!!"; } else
 			if (prio >= 4 && prio <= 7) { prio = "!!"; }
 			if (count % 2 == 0)
-				printf "\033[48;5;234m%3s %-65s %-10s %-10s\033[0m\n", prio, summary, tag, due;
+				printf "\033[48;5;234m%3s %-65s %-10s %-12s %-5s\033[0m\n", prio, summary, tag, due, uid;
 			else
-				printf "\033[0m%3s %-65s %-10s %-10s\n", prio, summary, tag, due;
+				printf "\033[0m%3s %-65s %-10s %-12s %-5s\n", prio, summary, tag, due, uid;
+			count = count + 1
 		}
 	}
 	' \
@@ -98,7 +102,12 @@ list() {
 	esac
 }
 
-list ${1}
+edit() {
+	local uid=${1}
+	parse all ${folder_cal}/*/${uid}.ics
+}
 
+list ${1}
+#edit ${1}
 
 # vim:syntax=sh
