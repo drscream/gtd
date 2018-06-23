@@ -14,9 +14,19 @@
 # 5 = mid
 # 9 = low
 
-
 inbox=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_inbox}/*)
 things=$(grep --recursive --files-with-match 'BEGIN:VTODO' ${folder_things}/*)
+
+usage() {
+	echo "${0} [list|show|edit|sync]"
+	echo ""
+	echo "OPTIONS:"
+	echo "  list [today|next|scheduled|someday|all]"
+	echo "  show [uid]"
+	echo "  edit [uid]"
+	echo "  sync"
+	exit 0
+}
 
 parse() {
 	local looks=${1}; shift
@@ -47,7 +57,11 @@ parse() {
 		today = strftime("%Y-%m-%d", systime());
 		count = 0;
 	}
-	/^BEGIN:VTODO/ { due = 0; tag = ""; prio = 0; };
+	/^BEGIN:VTODO/ {
+		due = 0; tag = ""; prio = 0;
+		n = split (FILENAME, a ,/\//)
+		filename = substr(a[n], 0, 5)
+	};
 	/^SUMMARY:/    {
 		summary = gensub("\r", "", "g", gensub(/^SUMMARY:/, "", 1, $0));
 		if (length(summary) > 57) {
@@ -69,9 +83,9 @@ parse() {
 			if (prio < 4 && prio != 0) { prio = "!!!"; } else
 			if (prio >= 4 && prio <= 7) { prio = "!!"; }
 			if (count % 2 == 0)
-				printf "\033[48;5;234m%3s %-65s %-10s %-12s %-5s\033[0m\n", prio, summary, tag, due, uid;
+				printf "\033[48;5;234m%3s %-65s %-10s %-12s %-5s\033[0m\n", prio, summary, tag, due, filename;
 			else
-				printf "\033[0m%3s %-65s %-10s %-12s %-5s\n", prio, summary, tag, due, uid;
+				printf "\033[0m%3s %-65s %-10s %-12s %-5s\n", prio, summary, tag, due, filename;
 			count = count + 1
 		}
 	}
@@ -102,12 +116,47 @@ list() {
 	esac
 }
 
-edit() {
-	local uid=${1}
-	parse all ${folder_cal}/*/${uid}.ics
+sync() {
+	vdirsyncer sync
 }
 
-list ${1}
+show() {
+	local uid=${1}
+	if [[ -z ${uid} ]]; then
+		for f in ${inbox} ${things}; do
+			file=$(basename ${f//.ics})
+			echo ${file:0:5}
+		done
+	else
+		parse all ${folder_cal}/*/${uid}*.ics
+	fi
+}
+
+case ${1} in
+	list)
+		shift
+		list ${1}
+		;;
+	add)
+		add
+		;;
+	edit)
+		shift
+		edit ${1}
+		;;
+	show)
+		shift
+		show ${1}
+		;;
+	sync)
+		sync
+		;;
+	*)
+		usage
+		;;
+esac
+
+#list ${1}
 #edit ${1}
 
 # vim:syntax=sh
