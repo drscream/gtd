@@ -35,10 +35,10 @@ parse() {
 
 	case ${looks} in
 		today)
-			lookup='if ((due != 0 && due <= today) || prio == 1 || tag == "today")'
+			lookup='if (((due != 0 && due <= today) || prio == 1 || tag == "today") && done == 0)'
 			;;
 		next)
-			lookup='if ((due == 0 || due > today) && (tag == "next" || tag == ""))'
+			lookup='if ((due == 0 || due > today) && (tag == "next" || tag == "") && done == 0)'
 			;;
 		scheduled)
 			lookup='if (due > today)'
@@ -58,7 +58,7 @@ parse() {
 		count = 0;
 	}
 	/^BEGIN:VTODO/ {
-		due = 0; tag = ""; prio = 0;
+		due = 0; tag = ""; prio = 0; done = 0;
 		n = split (FILENAME, a ,/\//)
 		filename = substr(a[n], 0, 5)
 	};
@@ -73,7 +73,13 @@ parse() {
 	/^PRIORITY/    { prio = $2; };
 	/^DESCRIPTION/ { description = gensub("\r", "", "g", gensub(/^DESCRIPTION:/, "", 1, $0)); }
 	/^UID/         { uid = substr($2, 0, 5); };
-
+	/^STATUS/ {
+		status = gensub("\r", "", "g", $2);
+		if (status == "COMPLETED") {
+			done = 1
+		}
+	}
+	
 	/^END:VTODO/ {
 		'"${lookup}"' {
 			if (tag != "") tag = "@"tag;
@@ -132,21 +138,53 @@ show() {
 	fi
 }
 
+_done() {
+	local uid=${1}
+	local file=$(ls ~/.calendars/*/${uid}*.ics 2>/dev/null)
+	if [[ -f "${file}" ]]; then
+		gsed -i 's|STATUS:.*|STATUS:COMPLETED|g' ${file}
+	else
+		_error "TODO does not exist!"
+	fi
+}
+
+_undone() {
+	local uid=${1}
+	local file=$(ls ~/.calendars/*/${uid}*.ics 2>/dev/null)
+	if [[ -f "${file}" ]]; then
+		gsed -i 's|STATUS:.*|STATUS:NEED-ACTION|g' ${file}
+	else
+		_error "TODO does not exist!"
+	fi
+}
+
+_error() {
+	echo ${@}
+}
+
 case ${1} in
-	list)
+	l|list)
 		shift
 		list ${1}
 		;;
-	add)
+	a|add)
 		add
 		;;
-	edit)
+	e|edit)
 		shift
 		edit ${1}
 		;;
-	show)
+	s|show)
 		shift
 		show ${1}
+		;;
+	d|done)
+		shift
+		_done ${1}
+		;;
+	u|undone)
+		shift
+		_undone ${1}
 		;;
 	sync)
 		sync
